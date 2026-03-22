@@ -3,10 +3,33 @@ const cors = require("cors");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { OAuth2Client } = require("google-auth-library");
 const fs = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
+
+const serverEnvPath = path.join(__dirname, ".env");
+if (fs.existsSync(serverEnvPath)) {
+  const envLines = fs.readFileSync(serverEnvPath, "utf-8").split(/\r?\n/);
+  envLines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return;
+    }
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1) {
+      return;
+    }
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = trimmed.slice(separatorIndex + 1).trim();
+    if (key && !process.env[key]) {
+      process.env[key] = value;
+    }
+  });
+}
+
+const { isSupabaseConfigured, supabaseAdmin, supabaseStorageBucket } = require("./supabase");
 
 const app = express();
 
@@ -16,9 +39,7 @@ const REFRESH_SECRET = process.env.REFRESH_SECRET || "change-this-refresh-secret
 const CLIENT_URL_RAW = process.env.CLIENT_URL || "http://localhost:5173";
 const CLIENT_URLS = CLIENT_URL_RAW.split(",").map((u) => u.trim());
 const CLIENT_URL = CLIENT_URLS[0];
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const TOKEN_EXPIRED_MESSAGE = "Token expired.";
-const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 const dataDir = path.join(__dirname, "data");
 const uploadsDir = path.join(__dirname, "uploads");
@@ -32,7 +53,7 @@ const storage = multer.diskStorage({
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname || "");
     cb(null, `${Date.now()}-${uuidv4()}${ext}`);
-  }
+  },
 });
 
 const upload = multer({ storage });
@@ -78,7 +99,7 @@ function seedDatabase() {
         activationToken: null,
         activationTokenExpiresAt: null,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       },
       {
         _id: uuidv4(),
@@ -94,12 +115,12 @@ function seedDatabase() {
         activationToken: null,
         activationTokenExpiresAt: null,
         createdAt: now,
-        updatedAt: now
-      }
+        updatedAt: now,
+      },
     ],
     banners: [],
     brands: [],
-    chats: []
+    chats: [],
   };
 
   fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
@@ -114,6 +135,21 @@ function writeDb(db) {
   fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
 }
 
+function success(res, result, message = "Success", meta) {
+  return res.status(200).json({
+    message,
+    result,
+    ...(meta ? { meta } : {}),
+  });
+}
+
+function failure(res, status, message, result) {
+  return res.status(status).json({
+    message,
+    ...(result ? { result } : {}),
+  });
+}
+
 function sanitizeUser(user) {
   return {
     _id: user._id,
@@ -126,23 +162,50 @@ function sanitizeUser(user) {
     status: user.status,
     isActive: user.isActive,
     createdAt: user.createdAt,
-    updatedAt: user.updatedAt
+    updatedAt: user.updatedAt,
   };
 }
 
-function success(res, result, message = "Success", meta) {
-  return res.status(200).json({
-    message,
-    result,
-    ...(meta ? { meta } : {})
-  });
+function mapSupabaseProfile(profile) {
+  return {
+    _id: profile.id,
+    authUserId: profile.auth_user_id,
+    name: profile.name,
+    email: profile.email,
+    phone: profile.phone,
+    address: profile.address,
+    role: profile.role,
+    image: profile.image,
+    status: profile.status,
+    isActive: profile.is_active,
+    createdAt: profile.created_at,
+    updatedAt: profile.updated_at,
+  };
 }
 
-function failure(res, status, message, result) {
-  return res.status(status).json({
-    message,
-    ...(result ? { result } : {})
-  });
+function mapSupabaseBanner(row) {
+  return {
+    _id: row.id,
+    title: row.title,
+    link: row.link,
+    image: row.image,
+    status: row.status,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapSupabaseBrand(row) {
+  return {
+    _id: row.id,
+    title: row.title,
+    image: row.image,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 function getToken(req) {
@@ -150,46 +213,17 @@ function getToken(req) {
   return authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 }
 
-function authRequired(req, res, next) {
-  try {
-    const token = getToken(req);
-    if (!token) {
-      return failure(res, 401, "Authorization token missing");
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const db = readDb();
-    const user = db.users.find((item) => item._id === decoded.sub);
-
-    if (!user) {
-      return failure(res, 401, "User not found");
-    }
-
-    req.user = user;
-    next();
-  } catch (_error) {
-    return failure(res, 401, "Invalid or expired token");
-  }
-}
-
-function adminRequired(req, res, next) {
-  if (!req.user || req.user.role !== "admin") {
-    return failure(res, 403, "Admin access required");
-  }
-  next();
-}
-
 function generateTokens(user) {
   return {
     token: jwt.sign({ sub: user._id, role: user.role }, JWT_SECRET, { expiresIn: "1d" }),
-    refreshToken: jwt.sign({ sub: user._id }, REFRESH_SECRET, { expiresIn: "7d" })
+    refreshToken: jwt.sign({ sub: user._id }, REFRESH_SECRET, { expiresIn: "7d" }),
   };
 }
 
 function createActivationToken() {
   return {
     token: uuidv4(),
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
   };
 }
 
@@ -220,8 +254,8 @@ function paginate(items, page, limit) {
     meta: {
       currentPage,
       limit: perPage,
-      total: items.length
-    }
+      total: items.length,
+    },
   };
 }
 
@@ -236,7 +270,7 @@ function mapBanner(req, existing) {
     startDate: body.startDate || existing?.startDate || new Date().toISOString().slice(0, 10),
     endDate: body.endDate || existing?.endDate || new Date().toISOString().slice(0, 10),
     createdAt: existing?.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -248,15 +282,150 @@ function mapBrand(req, existing) {
     image: req.file ? buildFileUrl(req, req.file.filename) : existing?.image || null,
     status: normalizeStatus(body.status || existing?.status),
     createdAt: existing?.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 }
 
+async function ensureSupabaseProfile(authUser, roleHint) {
+  if (!isSupabaseConfigured || !supabaseAdmin) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const userMetadata = authUser.user_metadata || {};
+  const appMetadata = authUser.app_metadata || {};
+  const email = authUser.email || userMetadata.email || "";
+
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("profiles")
+    .select("*")
+    .eq("auth_user_id", authUser.id)
+    .maybeSingle();
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  const payload = {
+    auth_user_id: authUser.id,
+    email,
+    name: userMetadata.name || userMetadata.full_name || existing?.name || email.split("@")[0],
+    phone: userMetadata.phone || existing?.phone || null,
+    address: userMetadata.address || existing?.address || null,
+    role: existing?.role || roleHint || userMetadata.role || appMetadata.role || "customer",
+    image:
+      userMetadata.avatar_url ||
+      userMetadata.picture ||
+      userMetadata.image ||
+      existing?.image ||
+      null,
+    status: "active",
+    is_active: true,
+    updated_at: now,
+    created_at: existing?.created_at || now,
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .upsert(existing ? { ...existing, ...payload } : payload, {
+      onConflict: "auth_user_id",
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapSupabaseProfile(data);
+}
+
+async function uploadToSupabaseStorage(file, folder) {
+  if (!isSupabaseConfigured || !supabaseAdmin || !file) {
+    return null;
+  }
+
+  const ext = path.extname(file.originalname || "");
+  const objectPath = `${folder}/${Date.now()}-${uuidv4()}${ext}`;
+
+  try {
+    const fileBuffer = fs.readFileSync(file.path);
+    const { error } = await supabaseAdmin.storage
+      .from(supabaseStorageBucket)
+      .upload(objectPath, fileBuffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    const { data } = supabaseAdmin.storage
+      .from(supabaseStorageBucket)
+      .getPublicUrl(objectPath);
+
+    return data.publicUrl;
+  } finally {
+    if (file.path && fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+  }
+}
+
+async function authRequired(req, res, next) {
+  try {
+    const token = getToken(req);
+    if (!token) {
+      return failure(res, 401, "Authorization token missing");
+    }
+
+    if (isSupabaseConfigured && supabaseAdmin) {
+      const { data, error } = await supabaseAdmin.auth.getUser(token);
+      if (error || !data.user) {
+        return failure(res, 401, "Invalid or expired token");
+      }
+
+      req.authUser = data.user;
+      req.user = await ensureSupabaseProfile(data.user);
+      return next();
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const db = readDb();
+    const user = db.users.find((item) => item._id === decoded.sub);
+
+    if (!user) {
+      return failure(res, 401, "User not found");
+    }
+
+    req.user = user;
+    return next();
+  } catch (_error) {
+    return failure(res, 401, "Invalid or expired token");
+  }
+}
+
+function adminRequired(req, res, next) {
+  if (!req.user || req.user.role !== "admin") {
+    return failure(res, 403, "Admin access required");
+  }
+  next();
+}
+
 app.get("/", (_req, res) => {
-  return success(res, { ok: true }, "Backend is running");
+  return success(res, { ok: true, supabase: isSupabaseConfigured }, "Backend is running");
 });
 
 app.post("/auth/register", upload.single("image"), async (req, res) => {
+  if (isSupabaseConfigured) {
+    return failure(
+      res,
+      400,
+      "Supabase auth is enabled. Use the frontend Supabase sign-up flow."
+    );
+  }
+
   const db = readDb();
   const body = req.body || {};
   const errors = {};
@@ -301,7 +470,7 @@ app.post("/auth/register", upload.single("image"), async (req, res) => {
     activationToken: activation.token,
     activationTokenExpiresAt: activation.expiresAt,
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   db.users.push(user);
@@ -312,12 +481,20 @@ app.post("/auth/register", upload.single("image"), async (req, res) => {
     result: {
       user: sanitizeUser(user),
       activationToken: activation.token,
-      activationUrl: `${CLIENT_URL}/auth/activate/${activation.token}`
-    }
+      activationUrl: `${CLIENT_URL}/auth/activate/${activation.token}`,
+    },
   });
 });
 
 app.post("/auth/login", async (req, res) => {
+  if (isSupabaseConfigured) {
+    return failure(
+      res,
+      400,
+      "Supabase auth is enabled. Use the frontend Supabase sign-in flow."
+    );
+  }
+
   const db = readDb();
   const { email, password } = req.body || {};
   const normalizedEmail = String(email || "").trim().toLowerCase();
@@ -340,86 +517,47 @@ app.post("/auth/login", async (req, res) => {
     res,
     {
       token: generateTokens(user),
-      userDetail: sanitizeUser(user)
+      userDetail: sanitizeUser(user),
     },
     "Login successful"
   );
 });
 
-app.post("/auth/google", async (req, res) => {
-  try {
-    if (!googleClient || !GOOGLE_CLIENT_ID) {
-      return failure(res, 500, "Google login is not configured on the server");
-    }
-
-    const { credential, role } = req.body || {};
-    if (!credential) {
-      return failure(res, 400, "Google credential is required");
-    }
-
-    const ticket = await googleClient.verifyIdToken({
-      idToken: credential,
-      audience: GOOGLE_CLIENT_ID
-    });
-    const payload = ticket.getPayload();
-
-    if (!payload || !payload.email) {
-      return failure(res, 400, "Unable to read Google account");
-    }
-
-    const db = readDb();
-    const email = String(payload.email).trim().toLowerCase();
-    let user = db.users.find((item) => item.email === email);
-
-    if (user) {
-      user.name = payload.name || user.name;
-      user.image = payload.picture || user.image || null;
-      user.isActive = true;
-      user.status = "active";
-      user.googleId = payload.sub;
-      user.updatedAt = new Date().toISOString();
-    } else {
-      user = {
-        _id: uuidv4(),
-        name: payload.name || email.split("@")[0],
-        email,
-        phone: null,
-        address: null,
-        passwordHash: null,
-        role: role === "seller" ? "seller" : "customer",
-        image: payload.picture || null,
-        status: "active",
-        isActive: true,
-        activationToken: null,
-        activationTokenExpiresAt: null,
-        googleId: payload.sub,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      db.users.push(user);
-    }
-
-    writeDb(db);
-
-    return success(
+app.post("/auth/google", async (_req, res) => {
+  if (isSupabaseConfigured) {
+    return failure(
       res,
-      {
-        token: generateTokens(user),
-        userDetail: sanitizeUser(user)
-      },
-      "Google login successful"
+      400,
+      "Supabase auth is enabled. Use the frontend Supabase OAuth flow."
     );
-  } catch (error) {
-    console.error(error);
-    return failure(res, 401, "Google authentication failed");
   }
+
+  return failure(res, 400, "Google auth is not configured in local mode");
+});
+
+app.post("/auth/profile/sync", authRequired, async (req, res) => {
+  if (isSupabaseConfigured && req.authUser) {
+    try {
+      const profile = await ensureSupabaseProfile(req.authUser, req.body?.role);
+      return success(res, profile, "Profile synced");
+    } catch (error) {
+      console.error(error);
+      return failure(res, 500, "Failed to sync profile");
+    }
+  }
+
+  return success(res, sanitizeUser(req.user), "Profile synced");
 });
 
 app.get("/auth/me", authRequired, (req, res) => {
-  return success(res, sanitizeUser(req.user), "Logged in user fetched");
+  return success(res, isSupabaseConfigured ? req.user : sanitizeUser(req.user), "Logged in user fetched");
 });
 
 app.get("/auth/activate/:token", (req, res) => {
+  if (isSupabaseConfigured) {
+    return success(res, { redirected: true }, "Supabase email confirmation handles activation");
+  }
+
   const db = readDb();
   const user = db.users.find((item) => item.activationToken === req.params.token);
 
@@ -445,6 +583,10 @@ app.get("/auth/activate/:token", (req, res) => {
 });
 
 app.get("/auth/resend-activationtoken/:token", (req, res) => {
+  if (isSupabaseConfigured) {
+    return failure(res, 400, "Supabase email confirmation handles activation");
+  }
+
   const db = readDb();
   const user = db.users.find((item) => item.activationToken === req.params.token);
 
@@ -462,13 +604,35 @@ app.get("/auth/resend-activationtoken/:token", (req, res) => {
     res,
     {
       activationToken: activation.token,
-      activationUrl: `${CLIENT_URL}/auth/activate/${activation.token}`
+      activationUrl: `${CLIENT_URL}/auth/activate/${activation.token}`,
     },
     "New activation token generated"
   );
 });
 
-app.get("/banner/list-home", (_req, res) => {
+app.get("/banner/list-home", async (_req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from("banners")
+      .select("*")
+      .eq("status", "active")
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      return failure(res, 500, "Failed to fetch home banners");
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const filtered = (data || []).filter((banner) => {
+      return (
+        (!banner.start_date || banner.start_date <= today) &&
+        (!banner.end_date || banner.end_date >= today)
+      );
+    });
+
+    return success(res, { data: filtered.map(mapSupabaseBanner) }, "Home banners fetched");
+  }
+
   const db = readDb();
   const today = new Date().toISOString().slice(0, 10);
   const data = db.banners.filter((banner) => {
@@ -482,7 +646,36 @@ app.get("/banner/list-home", (_req, res) => {
   return success(res, { data }, "Home banners fetched");
 });
 
-app.get("/banner", authRequired, adminRequired, (req, res) => {
+app.get("/banner", authRequired, adminRequired, async (req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
+    const search = String(req.query.search || "").trim();
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabaseAdmin
+      .from("banners")
+      .select("*", { count: "exact" })
+      .order("updated_at", { ascending: false });
+
+    if (search) {
+      query = query.ilike("title", `%${search}%`);
+    }
+
+    const { data, error, count } = await query.range(from, to);
+
+    if (error) {
+      return failure(res, 500, "Failed to fetch banners");
+    }
+
+    return success(res, (data || []).map(mapSupabaseBanner), "Banners fetched", {
+      currentPage: page,
+      limit,
+      total: count || 0,
+    });
+  }
+
   const db = readDb();
   const filtered = filterSearch(db.banners, req.query.search).sort((a, b) => {
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
@@ -491,7 +684,21 @@ app.get("/banner", authRequired, adminRequired, (req, res) => {
   return success(res, rows, "Banners fetched", meta);
 });
 
-app.get("/banner/:id", authRequired, adminRequired, (req, res) => {
+app.get("/banner/:id", authRequired, adminRequired, async (req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from("banners")
+      .select("*")
+      .eq("id", req.params.id)
+      .single();
+
+    if (error || !data) {
+      return failure(res, 404, "Banner not found");
+    }
+
+    return success(res, mapSupabaseBanner(data), "Banner detail fetched");
+  }
+
   const db = readDb();
   const banner = db.banners.find((item) => item._id === req.params.id);
   if (!banner) {
@@ -500,9 +707,39 @@ app.get("/banner/:id", authRequired, adminRequired, (req, res) => {
   return success(res, banner, "Banner detail fetched");
 });
 
-app.post("/banner", authRequired, adminRequired, upload.single("image"), (req, res) => {
+app.post("/banner", authRequired, adminRequired, upload.single("image"), async (req, res) => {
   if (!req.file) {
     return failure(res, 400, "Banner image is required");
+  }
+
+  if (isSupabaseConfigured && supabaseAdmin) {
+    try {
+      const image = await uploadToSupabaseStorage(req.file, "banners");
+      const { data, error } = await supabaseAdmin
+        .from("banners")
+        .insert({
+          title: req.body.title,
+          link: req.body.link || null,
+          image,
+          status: normalizeStatus(req.body.status),
+          start_date: req.body.startDate || null,
+          end_date: req.body.endDate || null,
+        })
+        .select("*")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return res.status(201).json({
+        message: "Banner created successfully",
+        result: mapSupabaseBanner(data),
+      });
+    } catch (error) {
+      console.error(error);
+      return failure(res, 500, "Failed to create banner");
+    }
   }
 
   const db = readDb();
@@ -512,11 +749,53 @@ app.post("/banner", authRequired, adminRequired, upload.single("image"), (req, r
 
   return res.status(201).json({
     message: "Banner created successfully",
-    result: banner
+    result: banner,
   });
 });
 
-app.patch("/banner/:id", authRequired, adminRequired, upload.single("image"), (req, res) => {
+app.patch("/banner/:id", authRequired, adminRequired, upload.single("image"), async (req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    try {
+      const { data: existing, error: existingError } = await supabaseAdmin
+        .from("banners")
+        .select("*")
+        .eq("id", req.params.id)
+        .single();
+
+      if (existingError || !existing) {
+        return failure(res, 404, "Banner not found");
+      }
+
+      const image = req.file
+        ? await uploadToSupabaseStorage(req.file, "banners")
+        : existing.image;
+
+      const { data, error } = await supabaseAdmin
+        .from("banners")
+        .update({
+          title: req.body.title || existing.title,
+          link: req.body.link || null,
+          image,
+          status: normalizeStatus(req.body.status || existing.status),
+          start_date: req.body.startDate || existing.start_date,
+          end_date: req.body.endDate || existing.end_date,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", req.params.id)
+        .select("*")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return success(res, mapSupabaseBanner(data), "Banner updated successfully");
+    } catch (error) {
+      console.error(error);
+      return failure(res, 500, "Failed to update banner");
+    }
+  }
+
   const db = readDb();
   const index = db.banners.findIndex((item) => item._id === req.params.id);
   if (index === -1) {
@@ -530,7 +809,15 @@ app.patch("/banner/:id", authRequired, adminRequired, upload.single("image"), (r
   return success(res, banner, "Banner updated successfully");
 });
 
-app.delete("/banner/:id", authRequired, adminRequired, (req, res) => {
+app.delete("/banner/:id", authRequired, adminRequired, async (req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    const { error } = await supabaseAdmin.from("banners").delete().eq("id", req.params.id);
+    if (error) {
+      return failure(res, 404, "Banner not found");
+    }
+    return success(res, { _id: req.params.id }, "Banner deleted successfully");
+  }
+
   const db = readDb();
   const exists = db.banners.some((item) => item._id === req.params.id);
   if (!exists) {
@@ -542,7 +829,35 @@ app.delete("/banner/:id", authRequired, adminRequired, (req, res) => {
   return success(res, { _id: req.params.id }, "Banner deleted successfully");
 });
 
-app.get("/brand", authRequired, adminRequired, (req, res) => {
+app.get("/brand", authRequired, adminRequired, async (req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
+    const search = String(req.query.search || "").trim();
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabaseAdmin
+      .from("brands")
+      .select("*", { count: "exact" })
+      .order("updated_at", { ascending: false });
+
+    if (search) {
+      query = query.ilike("title", `%${search}%`);
+    }
+
+    const { data, error, count } = await query.range(from, to);
+    if (error) {
+      return failure(res, 500, "Failed to fetch brands");
+    }
+
+    return success(res, (data || []).map(mapSupabaseBrand), "Brands fetched", {
+      currentPage: page,
+      limit,
+      total: count || 0,
+    });
+  }
+
   const db = readDb();
   const filtered = filterSearch(db.brands, req.query.search).sort((a, b) => {
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
@@ -551,7 +866,21 @@ app.get("/brand", authRequired, adminRequired, (req, res) => {
   return success(res, rows, "Brands fetched", meta);
 });
 
-app.get("/brand/:id", authRequired, adminRequired, (req, res) => {
+app.get("/brand/:id", authRequired, adminRequired, async (req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from("brands")
+      .select("*")
+      .eq("id", req.params.id)
+      .single();
+
+    if (error || !data) {
+      return failure(res, 404, "Brand not found");
+    }
+
+    return success(res, mapSupabaseBrand(data), "Brand detail fetched");
+  }
+
   const db = readDb();
   const brand = db.brands.find((item) => item._id === req.params.id);
   if (!brand) {
@@ -560,9 +889,36 @@ app.get("/brand/:id", authRequired, adminRequired, (req, res) => {
   return success(res, brand, "Brand detail fetched");
 });
 
-app.post("/brand", authRequired, adminRequired, upload.single("image"), (req, res) => {
+app.post("/brand", authRequired, adminRequired, upload.single("image"), async (req, res) => {
   if (!req.file) {
     return failure(res, 400, "Brand image is required");
+  }
+
+  if (isSupabaseConfigured && supabaseAdmin) {
+    try {
+      const image = await uploadToSupabaseStorage(req.file, "brands");
+      const { data, error } = await supabaseAdmin
+        .from("brands")
+        .insert({
+          title: req.body.title,
+          image,
+          status: normalizeStatus(req.body.status),
+        })
+        .select("*")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return res.status(201).json({
+        message: "Brand created successfully",
+        result: mapSupabaseBrand(data),
+      });
+    } catch (error) {
+      console.error(error);
+      return failure(res, 500, "Failed to create brand");
+    }
   }
 
   const db = readDb();
@@ -572,11 +928,50 @@ app.post("/brand", authRequired, adminRequired, upload.single("image"), (req, re
 
   return res.status(201).json({
     message: "Brand created successfully",
-    result: brand
+    result: brand,
   });
 });
 
-app.patch("/brand/:id", authRequired, adminRequired, upload.single("image"), (req, res) => {
+app.patch("/brand/:id", authRequired, adminRequired, upload.single("image"), async (req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    try {
+      const { data: existing, error: existingError } = await supabaseAdmin
+        .from("brands")
+        .select("*")
+        .eq("id", req.params.id)
+        .single();
+
+      if (existingError || !existing) {
+        return failure(res, 404, "Brand not found");
+      }
+
+      const image = req.file
+        ? await uploadToSupabaseStorage(req.file, "brands")
+        : existing.image;
+
+      const { data, error } = await supabaseAdmin
+        .from("brands")
+        .update({
+          title: req.body.title || existing.title,
+          image,
+          status: normalizeStatus(req.body.status || existing.status),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", req.params.id)
+        .select("*")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return success(res, mapSupabaseBrand(data), "Brand updated successfully");
+    } catch (error) {
+      console.error(error);
+      return failure(res, 500, "Failed to update brand");
+    }
+  }
+
   const db = readDb();
   const index = db.brands.findIndex((item) => item._id === req.params.id);
   if (index === -1) {
@@ -590,7 +985,15 @@ app.patch("/brand/:id", authRequired, adminRequired, upload.single("image"), (re
   return success(res, brand, "Brand updated successfully");
 });
 
-app.delete("/brand/:id", authRequired, adminRequired, (req, res) => {
+app.delete("/brand/:id", authRequired, adminRequired, async (req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    const { error } = await supabaseAdmin.from("brands").delete().eq("id", req.params.id);
+    if (error) {
+      return failure(res, 404, "Brand not found");
+    }
+    return success(res, { _id: req.params.id }, "Brand deleted successfully");
+  }
+
   const db = readDb();
   const exists = db.brands.some((item) => item._id === req.params.id);
   if (!exists) {

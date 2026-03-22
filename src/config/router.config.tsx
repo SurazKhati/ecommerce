@@ -10,7 +10,7 @@ import { HomePageLayout } from "../pages/layout/home.page";
 import {AdminLayout} from "../pages/layout/cms.page";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/ReactToastify.css"
-import { LoginPage, RegisterPage,UserActivation } from "../pages/auth";
+import { LoginPage, RegisterPage,UserActivation, OAuthCallbackPage } from "../pages/auth";
 import { useEffect, useState } from "react";
 import AuthContext from "../context/auth.context";
 import authSvc from "../pages/auth/auth.service";
@@ -84,6 +84,7 @@ const RouterConfig =() =>{
             <Route path="/licensing" element={<Licensing/>}/>
             <Route path="/login" element={<LoginPage/>}/>
             <Route path ="/auth/activate/:token" element={<UserActivation/>}/>
+            <Route path ="/auth/callback" element={<OAuthCallbackPage/>}/>
             
 
             <Route path="*"  element={<NotFoundError url="/" label="Home"/>}/>

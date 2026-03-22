@@ -3,6 +3,13 @@ import { ImageWithTitleCard, SinglePorductCard } from "../../components/common/c
 import { Link } from "react-router-dom";
 import "./landing.css";
 
+import stove1 from "../../assets/images/stove1.jpg";
+import stove2 from "../../assets/images/stove2.jpg";
+import stove3 from "../../assets/images/stove3.jpg";
+import stove4 from "../../assets/images/stove4.png";
+import stove5 from "../../assets/images/stove5.jpg";
+import stove6 from "../../assets/images/stove6.jpg";
+
 const CATEGORIES = [
   {
     _id: "1",
@@ -22,32 +29,38 @@ const FEATURED_PRODUCTS = [
   {
     _id: "1",
     price: "15,999",
-    title: "Philips HD4928 2000W Electric Kettle",
-    image: "https://flowbite-react.com/images/products/apple-watch.png",
+    title: "Stove Model 1",
+    image: stove1,
   },
   {
     _id: "2",
-    price: "22,500",
-    title: "Prestige PIC 20 2000W Induction Cooktop",
-    image: "https://flowbite-react.com/images/products/apple-watch.png",
+    price: "16,999",
+    title: "Stove Model 2",
+    image: stove2,
   },
   {
     _id: "3",
-    price: "18,900",
-    title: "Bajaj Majesty RCX 5 1850W Rice Cooker",
-    image: "https://flowbite-react.com/images/products/apple-watch.png",
+    price: "17,499",
+    title: "Stove Model 3",
+    image: stove3,
   },
   {
     _id: "4",
-    price: "12,499",
-    title: "Orient Electric Kitchen Hub Combo",
-    image: "https://flowbite-react.com/images/products/apple-watch.png",
+    price: "18,499",
+    title: "Stove Model 4",
+    image: stove4,
   },
   {
     _id: "5",
-    price: "25,000",
-    title: "Pigeon Favourite Electric Cooker 4.5L",
-    image: "https://flowbite-react.com/images/products/apple-watch.png",
+    price: "19,000",
+    title: "Stove Model 5",
+    image: stove5,
+  },
+  {
+    _id: "6",
+    price: "20,500",
+    title: "Stove Model 6",
+    image: stove6,
   },
 ];
 
