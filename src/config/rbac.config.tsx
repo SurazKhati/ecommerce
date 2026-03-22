@@ -2,6 +2,7 @@ import {  PropsWithChildren } from "react"
 import { toast } from "react-toastify"
 import { Navigate ,} from "react-router-dom"
 import { useSelector } from "react-redux"
+import { getRouteForRole } from "./../utils/role-route"
 // import { useEffect ,useState  } from "react"
 
 interface PermissionType  {
@@ -26,7 +27,7 @@ const CheckPermission = ({allowedBy,children}:PropsWithChildren<PermissionType>)
         }else{
             toast.warn("You do not have permission to access this panel ")
             return(<>
-            <Navigate to = {`/${user.role}`} />
+            <Navigate to = {getRouteForRole(user.role)} />
             </>)
         }
 

@@ -3,6 +3,7 @@ const cors = require("cors");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { OAuth2Client } = require("google-auth-library");
 const fs = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
@@ -39,7 +40,11 @@ const REFRESH_SECRET = process.env.REFRESH_SECRET || "change-this-refresh-secret
 const CLIENT_URL_RAW = process.env.CLIENT_URL || "http://localhost:5173";
 const CLIENT_URLS = CLIENT_URL_RAW.split(",").map((u) => u.trim());
 const CLIENT_URL = CLIENT_URLS[0];
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ||
+  "458524892192-vpmp2cnrtgogj0dveimdhp4mm124c0cu.apps.googleusercontent.com";
 const TOKEN_EXPIRED_MESSAGE = "Token expired.";
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 const dataDir = path.join(__dirname, "data");
 const uploadsDir = path.join(__dirname, "uploads");
@@ -455,7 +460,6 @@ app.post("/auth/register", upload.single("image"), async (req, res) => {
     return failure(res, 400, "Validation failed", errors);
   }
 
-  const activation = createActivationToken();
   const user = {
     _id: uuidv4(),
     name: String(body.name).trim(),
@@ -465,10 +469,10 @@ app.post("/auth/register", upload.single("image"), async (req, res) => {
     passwordHash: await bcrypt.hash(String(body.password), 10),
     role: body.role === "seller" ? "seller" : "customer",
     image: req.file ? buildFileUrl(req, req.file.filename) : null,
-    status: "inactive",
-    isActive: false,
-    activationToken: activation.token,
-    activationTokenExpiresAt: activation.expiresAt,
+    status: "active",
+    isActive: true,
+    activationToken: null,
+    activationTokenExpiresAt: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -480,8 +484,6 @@ app.post("/auth/register", upload.single("image"), async (req, res) => {
     message: "Registration completed successfully",
     result: {
       user: sanitizeUser(user),
-      activationToken: activation.token,
-      activationUrl: `${CLIENT_URL}/auth/activate/${activation.token}`,
     },
   });
 });
@@ -523,7 +525,7 @@ app.post("/auth/login", async (req, res) => {
   );
 });
 
-app.post("/auth/google", async (_req, res) => {
+app.post("/auth/google", async (req, res) => {
   if (isSupabaseConfigured) {
     return failure(
       res,
@@ -532,7 +534,72 @@ app.post("/auth/google", async (_req, res) => {
     );
   }
 
-  return failure(res, 400, "Google auth is not configured in local mode");
+  if (!googleClient || !GOOGLE_CLIENT_ID) {
+    return failure(res, 400, "Google auth is not configured in local mode");
+  }
+
+  try {
+    const { credential, role } = req.body || {};
+    if (!credential) {
+      return failure(res, 400, "Google credential is required");
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+
+    if (!payload || !payload.email) {
+      return failure(res, 400, "Unable to read Google account");
+    }
+
+    const db = readDb();
+    const email = String(payload.email).trim().toLowerCase();
+    let user = db.users.find((item) => item.email === email);
+
+    if (user) {
+      user.name = payload.name || user.name;
+      user.image = payload.picture || user.image || null;
+      user.isActive = true;
+      user.status = "active";
+      user.googleId = payload.sub;
+      user.updatedAt = new Date().toISOString();
+    } else {
+      user = {
+        _id: uuidv4(),
+        name: payload.name || email.split("@")[0],
+        email,
+        phone: null,
+        address: null,
+        passwordHash: null,
+        role: role === "seller" ? "seller" : "customer",
+        image: payload.picture || null,
+        status: "active",
+        isActive: true,
+        activationToken: null,
+        activationTokenExpiresAt: null,
+        googleId: payload.sub,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      db.users.push(user);
+    }
+
+    writeDb(db);
+
+    return success(
+      res,
+      {
+        token: generateTokens(user),
+        userDetail: sanitizeUser(user),
+      },
+      "Google login successful"
+    );
+  } catch (error) {
+    console.error(error);
+    return failure(res, 401, "Google authentication failed");
+  }
 });
 
 app.post("/auth/profile/sync", authRequired, async (req, res) => {

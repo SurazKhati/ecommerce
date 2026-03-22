@@ -6,6 +6,7 @@ import LoadingComponent from "../../components/common/loading/loading.component"
 import authSvc from "./auth.service";
 import { setloggedInUserForRedux } from "../../reducer/user.reducer";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
+import { getRouteForRole } from "../../utils/role-route";
 
 const OAuthCallbackPage = () => {
   const dispatch = useDispatch();
@@ -51,7 +52,7 @@ const OAuthCallbackPage = () => {
 
         dispatch(setloggedInUserForRedux(response.result));
         toast.success(`Welcome ${response.result.role}`);
-        navigate(`/${response.result.role}`);
+        navigate(getRouteForRole(response.result.role));
       } catch (error: any) {
         console.log(error);
         toast.error(error?.message || "OAuth sign in failed");

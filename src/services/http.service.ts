@@ -10,9 +10,9 @@ interface HeaderConfigProps{
 
 abstract class HttpService{
 
-    private headers={};
-    private params={}
     private setHeaders =  (config:any) =>{
+        let headers:any = {};
+        let params:any = {};
         if(config && config.auth){
             // login token
             const token = localStorage.getItem('_at')|| null;
@@ -21,31 +21,32 @@ abstract class HttpService{
                 throw {message:"login first"}
             }else{
                 console.log("already logged")
-                this.headers = {
-                    ...this.headers,
+                headers = {
+                    ...headers,
                     "Authorization":"Bearer "+ token
 
                 }
             }
         }
         if(config && config.file){
-            this.headers = {
-                ...this.headers,
+            headers = {
+                ...headers,
                 "Content-Type":"multipart/form-data"
             }
         } // todo : params  set 
         if(config  && config.params){
-            this.params = {
+            params = {
                 ...config.params
             }
         }
+        return {headers, params}
     }
      postRequest = async(url:string,data:any = {}, config:any = null )=>{
         try{
-            this.setHeaders(config)
+            const {headers, params} = this.setHeaders(config)
             const response = await axiosInstance.post(url,data,{
-                headers:{...this.headers},
-                params:{...this.params}
+                headers:{...headers},
+                params:{...params}
             })
             console.log("sucessPost:",response);
             return response;
@@ -57,12 +58,12 @@ abstract class HttpService{
      }
      getRequest = async(url:string, config:any = null )=>{
         try{
-            this.setHeaders(config)
+            const {headers, params} = this.setHeaders(config)
             // this.headers
             const response = await axiosInstance.get(url,{
                 
-                headers:{...this.headers},
-                params:{...this.params}
+                headers:{...headers},
+                params:{...params}
             })
             // console.log("sucessget:",response);
             return response;
@@ -74,12 +75,12 @@ abstract class HttpService{
      }
      deleteRequest = async(url:string, config:any = null )=>{
         try{
-            this.setHeaders(config)
+            const {headers, params} = this.setHeaders(config)
             // this.headers
             const response = await axiosInstance.delete(url,{
                 
-                headers:{...this.headers},
-                params:{...this.params}
+                headers:{...headers},
+                params:{...params}
             })
             // console.log("sucessget:",response);
             return response;
@@ -91,10 +92,10 @@ abstract class HttpService{
      }
      patchRequest = async(url:string,data:any = {}, config:any = null )=>{
         try{
-            this.setHeaders(config)
+            const {headers, params} = this.setHeaders(config)
             const response = await axiosInstance.patch(url,data,{
-                headers:{...this.headers},
-                params:{...this.params}
+                headers:{...headers},
+                params:{...params}
             })
             console.log("sucessPost:",response);
             return response;

@@ -3,6 +3,7 @@ import { Navbar } from "flowbite-react";
 import logo from "../../../assets/images/logo.png";
 import { NavLink } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { getRouteForRole } from "../../../utils/role-route";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
@@ -52,7 +53,7 @@ export const HomeHeader = () => {
                       {loggedInUser.email}
                     </span>
                   </Dropdown.Header>
-                  <NavLink to={"/" + loggedInUser.role}>
+                  <NavLink to={getRouteForRole(loggedInUser.role)}>
                     <Dropdown.Item>Dashboard</Dropdown.Item>
                   </NavLink>
                   <Dropdown.Divider />

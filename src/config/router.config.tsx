@@ -10,7 +10,7 @@ import { HomePageLayout } from "../pages/layout/home.page";
 import {AdminLayout} from "../pages/layout/cms.page";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/ReactToastify.css"
-import { LoginPage, RegisterPage,UserActivation, OAuthCallbackPage } from "../pages/auth";
+import { LoginPage, RegisterPage,UserActivation, OAuthCallbackPage, LogoutPage } from "../pages/auth";
 import { useEffect, useState } from "react";
 import AuthContext from "../context/auth.context";
 import authSvc from "../pages/auth/auth.service";
@@ -22,7 +22,7 @@ import NotFoundError from "../components/common/error/not-found.error.component"
 import { BannerListingPage , BannerCreatePage , BannerEditPage} from "../pages/banner";
 import { BrandCreatePage, BrandEditPage, BrandListingPage } from "../pages/brand";
 import { useDispatch } from "react-redux";
-import { getLoggedInUserRedux, setloggedInUserForRedux } from "../reducer/user.reducer";
+import { setloggedInUserForRedux } from "../reducer/user.reducer";
 // import RegisterPage from "../pages/auth/register/register.page";
 // import  LoginPage  from "../pages/auth/login/login.page";
 // import UserActivation from "../pages/auth/activate/activate-user.page";
@@ -53,9 +53,7 @@ const RouterConfig =() =>{
   useEffect(()=>{
     let token = localStorage.getItem("_at");
     if(token){
-
-      dispatch(getLoggedInUserRedux())
-      setLoading(false)
+      getLoggedInUser()
     }else{
       setLoading(false)
     }
@@ -83,6 +81,7 @@ const RouterConfig =() =>{
             <Route path="/privacypolicy" element={<PrivacyPolicy/>}/>
             <Route path="/licensing" element={<Licensing/>}/>
             <Route path="/login" element={<LoginPage/>}/>
+            <Route path="/logout" element={<LogoutPage/>}/>
             <Route path ="/auth/activate/:token" element={<UserActivation/>}/>
             <Route path ="/auth/callback" element={<OAuthCallbackPage/>}/>
             

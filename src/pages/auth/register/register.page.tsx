@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { CredentialResponse, GoogleLogin } from "@react-oauth/google";
 import * as Yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -11,6 +12,9 @@ import authSvc from "../auth.service";
 import LoadingComponent from "../../../components/common/loading/loading.component";
 import { setloggedInUserForRedux } from "../../../reducer/user.reducer";
 import { isSupabaseConfigured, supabase } from "../../../lib/supabase";
+import { getRouteForRole } from "../../../utils/role-route";
+
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
 const RegisterPage = () => {
   const registerDTO = Yup.object({
@@ -42,7 +46,7 @@ const RegisterPage = () => {
   useEffect(() => {
     if (loggedInUser) {
       toast.info("You are already logged in");
-      navigate(`/${loggedInUser.role}`);
+      navigate(getRouteForRole(loggedInUser.role));
     }
   }, [loggedInUser, navigate]);
 
@@ -51,7 +55,7 @@ const RegisterPage = () => {
     localStorage.setItem("_rt", response.result.token.refreshToken);
     dispatch(setloggedInUserForRedux(response.result.userDetail));
     toast.success(`Welcome ${response.result.userDetail.role}`);
-    navigate(`/${response.result.userDetail.role}`);
+    navigate(getRouteForRole(response.result.userDetail.role));
   };
 
   const submitForm = async (data: any) => {
@@ -81,8 +85,8 @@ const RegisterPage = () => {
         navigate("/");
       } else {
         await authSvc.postRequest("/auth/register", data, { file: true });
-        toast.success("Registration is Done , Check your email for verification ");
-        navigate("/");
+        toast.success("Registration is done. You can login now.");
+        navigate("/login");
       }
     } catch (exception: any) {
       if (+exception?.status === 400 && exception?.data?.result) {
@@ -97,26 +101,42 @@ const RegisterPage = () => {
   };
 
   const handleGoogleRegister = async () => {
-    if (!isSupabaseConfigured || !supabase) {
-      toast.error("Supabase is not configured");
+    if (isSupabaseConfigured && supabase) {
+      try {
+        setLoading(true);
+        localStorage.setItem("_oauth_role", watch("role") || "customer");
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback`,
+          },
+        });
+
+        if (error) {
+          throw error;
+        }
+      } catch (error: any) {
+        toast.error(error?.message || "Google sign up failed");
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleGoogleCredential = async (credentialResponse: CredentialResponse) => {
+    if (!credentialResponse.credential) {
+      toast.error("Google sign up did not return a credential");
       return;
     }
 
     try {
       setLoading(true);
-      localStorage.setItem("_oauth_role", watch("role") || "customer");
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
+      const response = await authSvc.postRequest("/auth/google", {
+        credential: credentialResponse.credential,
+        role: watch("role") || "customer",
       });
-
-      if (error) {
-        throw error;
-      }
+      applyAuthResponse(response);
     } catch (error: any) {
-      toast.error(error?.message || "Google sign up failed");
+      toast.error(error?.data?.message || error?.message || "Google sign up failed");
       setLoading(false);
     }
   };
@@ -146,8 +166,8 @@ const RegisterPage = () => {
               Join us today! Create your account to enjoy seamless shopping and exclusive offers.
             </p>
 
-            <div className="mt-6 space-y-3">
-              {isSupabaseConfigured ? (
+            {isSupabaseConfigured ? (
+              <div className="mt-6 space-y-3">
                 <button
                   type="button"
                   onClick={handleGoogleRegister}
@@ -155,15 +175,26 @@ const RegisterPage = () => {
                 >
                   Sign up with Google
                 </button>
-              ) : (
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to enable Supabase auth.
+                <p className="text-sm text-gray-500">
+                  Google sign up uses the selected role below for new accounts.
                 </p>
-              )}
-              <p className="text-sm text-gray-500">
-                Google sign up uses the selected role below for new accounts.
-              </p>
-            </div>
+              </div>
+            ) : googleClientId ? (
+              <div className="mt-6 space-y-3">
+                <div className="flex justify-start">
+                  <GoogleLogin
+                    onSuccess={handleGoogleCredential}
+                    onError={() => toast.error("Google sign up failed")}
+                    text="signup_with"
+                    shape="pill"
+                    width="320"
+                  />
+                </div>
+                <p className="text-sm text-gray-500">
+                  Google sign up uses the selected role below for new accounts.
+                </p>
+              </div>
+            ) : null}
 
             <form onSubmit={handleSubmit(submitForm)} className="mt-8 grid grid-cols-6 gap-6">
               <div className="col-span-6">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "flowbite-react";
+import { CredentialResponse, GoogleLogin } from "@react-oauth/google";
 import * as Yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -12,6 +13,9 @@ import LoadingComponent from "../../../components/common/loading/loading.compone
 import authSvc from "../auth.service";
 import { setloggedInUserForRedux } from "../../../reducer/user.reducer";
 import { isSupabaseConfigured, supabase } from "../../../lib/supabase";
+import { getRouteForRole } from "../../../utils/role-route";
+
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
 const LoginPage = () => {
   const schema = Yup.object({
@@ -32,7 +36,7 @@ const LoginPage = () => {
   useEffect(() => {
     if (loggedInUser) {
       toast.info("You are already logged in");
-      navigate(`/${loggedInUser.role}`);
+      navigate(getRouteForRole(loggedInUser.role));
     }
   }, [loggedInUser, navigate]);
 
@@ -41,7 +45,7 @@ const LoginPage = () => {
     localStorage.setItem("_rt", response.result.token.refreshToken);
     dispatch(setloggedInUserForRedux(response.result.userDetail));
     toast.success(`Welcome ${response.result.userDetail.role}`);
-    navigate(`/${response.result.userDetail.role}`);
+    navigate(getRouteForRole(response.result.userDetail.role));
   };
 
   const login = async (data: any) => {
@@ -64,7 +68,7 @@ const LoginPage = () => {
         const profileResponse: any = await authSvc.getRequest("/auth/me", { auth: true });
         dispatch(setloggedInUserForRedux(profileResponse.result));
         toast.success(`Welcome ${profileResponse.result.role}`);
-        navigate(`/${profileResponse.result.role}`);
+        navigate(getRouteForRole(profileResponse.result.role));
       } else {
         const response = await authSvc.postRequest("/auth/login", data);
         applyAuthResponse(response);
@@ -78,26 +82,41 @@ const LoginPage = () => {
   };
 
   const handleGoogleLogin = async () => {
-    if (!isSupabaseConfigured || !supabase) {
-      toast.error("Supabase is not configured");
+    if (isSupabaseConfigured && supabase) {
+      try {
+        setLoading(true);
+        localStorage.removeItem("_oauth_role");
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback`,
+          },
+        });
+
+        if (error) {
+          throw error;
+        }
+      } catch (error: any) {
+        toast.error(error?.message || "Google login failed");
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleGoogleCredential = async (credentialResponse: CredentialResponse) => {
+    if (!credentialResponse.credential) {
+      toast.error("Google login did not return a credential");
       return;
     }
 
     try {
       setLoading(true);
-      localStorage.removeItem("_oauth_role");
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
+      const response = await authSvc.postRequest("/auth/google", {
+        credential: credentialResponse.credential,
       });
-
-      if (error) {
-        throw error;
-      }
+      applyAuthResponse(response);
     } catch (error: any) {
-      toast.error(error?.message || "Google login failed");
+      toast.error(error?.data?.message || error?.message || "Google login failed");
       setLoading(false);
     }
   };
@@ -164,11 +183,17 @@ const LoginPage = () => {
           >
             Continue with Google
           </button>
-        ) : (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to enable Supabase auth.
-          </p>
-        )}
+        ) : googleClientId ? (
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleCredential}
+              onError={() => toast.error("Google login failed")}
+              text="continue_with"
+              shape="pill"
+              width="320"
+            />
+          </div>
+        ) : null}
 
         <p className="mt-4 text-center text-xs text-gray-400">
           Admin: admin@demo.com / Admin@123
