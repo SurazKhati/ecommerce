@@ -63,6 +63,65 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+const defaultCategories = [
+  {
+    _id: uuidv4(),
+    title: "Electric stove",
+    slug: "/category/electric-stove",
+    description:
+      "Dependable countertop electric models with steady heating, simple knobs, and family-friendly durability.",
+    accent: "For home kitchens",
+    productCount: 7,
+    highlights: ["Easy heat control", "Budget friendly", "Long-lasting body"],
+    image: null,
+    status: "active",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    _id: uuidv4(),
+    title: "Induction stove",
+    slug: "/category/induction-stove",
+    description:
+      "High-efficiency induction cookers with touch panels, faster boiling, and cleaner cooking surfaces.",
+    accent: "Fast and efficient",
+    productCount: 5,
+    highlights: ["Quick response", "Less heat loss", "Safer for families"],
+    image: null,
+    status: "active",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    _id: uuidv4(),
+    title: "Premium cooktops",
+    slug: "/category/premium-cooktops",
+    description:
+      "Stylish premium stoves designed for modern interiors, showroom kitchens, and gift-worthy upgrades.",
+    accent: "Premium finish",
+    productCount: 4,
+    highlights: ["Elegant design", "Modern control panel", "Top-tier finishing"],
+    image: null,
+    status: "active",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    _id: uuidv4(),
+    title: "Commercial burners",
+    slug: "/category/commercial-burners",
+    description:
+      "Heavy-duty cooking units for cafes, hostels, and small food businesses that need consistent output.",
+    accent: "Business ready",
+    productCount: 3,
+    highlights: ["High output", "Stable frame", "Built for daily demand"],
+    image: null,
+    status: "active",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
 app.use(
   cors({
     origin: (origin, cb) => {
@@ -125,6 +184,8 @@ function seedDatabase() {
     ],
     banners: [],
     brands: [],
+    categories: defaultCategories,
+    products: [],
     chats: [],
   };
 
@@ -133,7 +194,18 @@ function seedDatabase() {
 
 function readDb() {
   seedDatabase();
-  return JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+  const db = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+  db.users = db.users || [];
+  db.banners = db.banners || [];
+  db.brands = db.brands || [];
+  db.categories = db.categories || defaultCategories;
+  db.products = db.products || [];
+  db.chats = db.chats || [];
+  if (!Array.isArray(db.categories) || db.categories.length === 0) {
+    db.categories = defaultCategories;
+    writeDb(db);
+  }
+  return db;
 }
 
 function writeDb(db) {
@@ -213,6 +285,20 @@ function mapSupabaseBrand(row) {
   };
 }
 
+function mapSupabaseProduct(row) {
+  return {
+    _id: row.id,
+    title: row.title,
+    description: row.description,
+    price: row.price,
+    stock: row.stock,
+    image: row.image,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function getToken(req) {
   const authHeader = req.headers.authorization || "";
   return authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -284,6 +370,55 @@ function mapBrand(req, existing) {
   return {
     _id: existing?._id || uuidv4(),
     title: body.title || existing?.title || "",
+    image: req.file ? buildFileUrl(req, req.file.filename) : existing?.image || null,
+    status: normalizeStatus(body.status || existing?.status),
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function mapProduct(req, existing) {
+  const body = req.body || {};
+  return {
+    _id: existing?._id || uuidv4(),
+    title: body.title || existing?.title || "",
+    description: body.description || existing?.description || "",
+    price: Number(body.price ?? existing?.price ?? 0),
+    stock: Number(body.stock ?? existing?.stock ?? 0),
+    image: req.file ? buildFileUrl(req, req.file.filename) : existing?.image || null,
+    status: normalizeStatus(body.status || existing?.status),
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function slugifyCategoryTitle(title = "") {
+  return `/category/${String(title)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")}`;
+}
+
+function mapCategory(req, existing) {
+  const body = req.body || {};
+  const title = body.title || existing?.title || "";
+  const highlightsRaw = body.highlights || existing?.highlights || [];
+  const highlights = Array.isArray(highlightsRaw)
+    ? highlightsRaw
+    : String(highlightsRaw)
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+  return {
+    _id: existing?._id || uuidv4(),
+    title,
+    slug: body.slug || existing?.slug || slugifyCategoryTitle(title),
+    description: body.description || existing?.description || "",
+    accent: body.accent || existing?.accent || "",
+    productCount: Number(body.productCount ?? existing?.productCount ?? 0),
+    highlights,
     image: req.file ? buildFileUrl(req, req.file.filename) : existing?.image || null,
     status: normalizeStatus(body.status || existing?.status),
     createdAt: existing?.createdAt || new Date().toISOString(),
@@ -713,6 +848,12 @@ app.get("/banner/list-home", async (_req, res) => {
   return success(res, { data }, "Home banners fetched");
 });
 
+app.get("/category/list-home", async (_req, res) => {
+  const db = readDb();
+  const data = db.categories.filter((category) => category.status === "active");
+  return success(res, { data }, "Home categories fetched");
+});
+
 app.get("/banner", authRequired, adminRequired, async (req, res) => {
   if (isSupabaseConfigured && supabaseAdmin) {
     const page = Math.max(Number(req.query.page) || 1, 1);
@@ -954,6 +1095,145 @@ app.get("/brand/:id", authRequired, adminRequired, async (req, res) => {
     return failure(res, 404, "Brand not found");
   }
   return success(res, brand, "Brand detail fetched");
+});
+
+app.get("/product", authRequired, adminRequired, async (req, res) => {
+  if (isSupabaseConfigured && supabaseAdmin) {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
+    const search = String(req.query.search || "").trim();
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabaseAdmin
+      .from("products")
+      .select("*", { count: "exact" })
+      .order("updated_at", { ascending: false });
+
+    if (search) {
+      query = query.ilike("title", `%${search}%`);
+    }
+
+    const { data, error, count } = await query.range(from, to);
+    if (error) {
+      return failure(res, 500, "Failed to fetch products");
+    }
+
+    return success(res, (data || []).map(mapSupabaseProduct), "Products fetched", {
+      currentPage: page,
+      limit,
+      total: count || 0,
+    });
+  }
+
+  const db = readDb();
+  const filtered = filterSearch(db.products, req.query.search).sort((a, b) => {
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+  const { rows, meta } = paginate(filtered, req.query.page, req.query.limit);
+  return success(res, rows, "Products fetched", meta);
+});
+
+app.get("/category", authRequired, adminRequired, async (req, res) => {
+  const db = readDb();
+  const filtered = filterSearch(db.categories, req.query.search).sort((a, b) => {
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+  const { rows, meta } = paginate(filtered, req.query.page, req.query.limit);
+  return success(res, rows, "Categories fetched", meta);
+});
+
+app.get("/category/:id", authRequired, adminRequired, async (req, res) => {
+  const db = readDb();
+  const category = db.categories.find((item) => item._id === req.params.id);
+  if (!category) {
+    return failure(res, 404, "Category not found");
+  }
+  return success(res, category, "Category detail fetched");
+});
+
+app.post("/category", authRequired, adminRequired, upload.single("image"), async (req, res) => {
+  const db = readDb();
+  const category = mapCategory(req);
+  db.categories.push(category);
+  writeDb(db);
+
+  return res.status(201).json({
+    message: "Category created successfully",
+    result: category,
+  });
+});
+
+app.patch("/category/:id", authRequired, adminRequired, upload.single("image"), async (req, res) => {
+  const db = readDb();
+  const index = db.categories.findIndex((item) => item._id === req.params.id);
+  if (index === -1) {
+    return failure(res, 404, "Category not found");
+  }
+
+  const category = mapCategory(req, db.categories[index]);
+  db.categories[index] = category;
+  writeDb(db);
+
+  return success(res, category, "Category updated successfully");
+});
+
+app.delete("/category/:id", authRequired, adminRequired, async (req, res) => {
+  const db = readDb();
+  const exists = db.categories.some((item) => item._id === req.params.id);
+  if (!exists) {
+    return failure(res, 404, "Category not found");
+  }
+
+  db.categories = db.categories.filter((item) => item._id !== req.params.id);
+  writeDb(db);
+  return success(res, { _id: req.params.id }, "Category deleted successfully");
+});
+
+app.post("/product", authRequired, adminRequired, upload.single("image"), async (req, res) => {
+  if (!req.file) {
+    return failure(res, 400, "Product image is required");
+  }
+
+  if (isSupabaseConfigured && supabaseAdmin) {
+    try {
+      const image = await uploadToSupabaseStorage(req.file, "products");
+      const { data, error } = await supabaseAdmin
+        .from("products")
+        .insert({
+          title: req.body.title,
+          description: req.body.description,
+          price: Number(req.body.price || 0),
+          stock: Number(req.body.stock || 0),
+          image,
+          status: normalizeStatus(req.body.status),
+        })
+        .select("*")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return res.status(201).json({
+        message: "Product created successfully",
+        result: mapSupabaseProduct(data),
+      });
+    } catch (error) {
+      console.error(error);
+      return failure(res, 500, "Failed to create product");
+    }
+  }
+
+  const db = readDb();
+  const product = mapProduct(req);
+  db.products.push(product);
+  writeDb(db);
+
+  return res.status(201).json({
+    message: "Product created successfully",
+    result: product,
+  });
 });
 
 app.post("/brand", authRequired, adminRequired, upload.single("image"), async (req, res) => {

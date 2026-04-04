@@ -21,6 +21,9 @@ import LoadingComponent from "../components/common/loading/loading.component";
 import NotFoundError from "../components/common/error/not-found.error.component";
 import { BannerListingPage , BannerCreatePage , BannerEditPage} from "../pages/banner";
 import { BrandCreatePage, BrandEditPage, BrandListingPage } from "../pages/brand";
+import { ProductCreatePage, ProductListingPage } from "../pages/product";
+import { CategoryCreatePage, CategoryEditPage, CategoryListingPage } from "../pages/category";
+import BuyNowPage from "../pages/buy-now.page/buy-now.page";
 import { useDispatch } from "react-redux";
 import { setloggedInUserForRedux } from "../reducer/user.reducer";
 // import RegisterPage from "../pages/auth/register/register.page";
@@ -77,6 +80,7 @@ const RouterConfig =() =>{
             <Route path="/categories" element={<CategoryPage/>}/>
             <Route path="/aboutus" element={<Aboutus/>}/>
             <Route path="/products" element={<ProductPage/>}/>
+            <Route path="/buy-now/:id" element={<BuyNowPage/>}/>
             <Route path="/contacts" element={<ContactsPage/>}/>
             <Route path="/privacypolicy" element={<PrivacyPolicy/>}/>
             <Route path="/licensing" element={<Licensing/>}/>
@@ -105,6 +109,11 @@ const RouterConfig =() =>{
 
                 <Route path="brand/create" element={<BrandCreatePage/>}></Route>
                 <Route path="brand/:id/edit" element={<BrandEditPage/>}></Route>
+                <Route path="category" element={<CategoryListingPage/>}></Route>
+                <Route path="category/create" element={<CategoryCreatePage/>}></Route>
+                <Route path="category/:id/edit" element={<CategoryEditPage/>}></Route>
+                <Route path="product" element={<ProductListingPage/>}></Route>
+                <Route path="product/create" element={<ProductCreatePage/>}></Route>
 
                 
           </Route>

@@ -4,13 +4,10 @@ import { HomeHeader } from "../../components/common/header/header"
 
 export const HomePageLayout = () =>{
     return(<>
-    
-    <HomeHeader/>
-
-        <Outlet/>
-
-    <FooterComponent/>
-
-    
+    <div className="min-h-screen bg-white text-slate-700 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
+      <HomeHeader/>
+      <Outlet/>
+      <FooterComponent/>
+    </div>
     </>)
 }

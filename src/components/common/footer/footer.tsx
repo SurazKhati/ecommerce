@@ -4,7 +4,7 @@ import logo from "../../../assets/images/logo.png";
 
 export const FooterComponent = () => {
   return (
-    <Footer container className="mt-16 rounded-none border-t border-slate-200 bg-slate-900">
+    <Footer container className="mt-16 rounded-none border-t border-slate-200 bg-slate-900 transition-colors duration-300 dark:border-slate-800 dark:bg-slate-950">
       <div className="w-full px-6 py-12 lg:px-16">
         <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-4">
           {/* BRAND */}
@@ -22,7 +22,7 @@ export const FooterComponent = () => {
                 Peoples Commerce
               </span>
             </Link>
-            <p className="text-sm leading-relaxed text-slate-400">
+            <p className="text-sm leading-relaxed text-slate-400 dark:text-slate-500">
               Your trusted destination for high-quality electric & induction stoves.
               Safe, efficient kitchen solutions for every home in Nepal.
             </p>
@@ -43,7 +43,7 @@ export const FooterComponent = () => {
                 <li key={item.to}>
                   <Link
                     to={item.to}
-                    className="text-slate-400 transition-colors hover:text-white"
+                    className="text-slate-400 transition-colors hover:text-white dark:text-slate-500 dark:hover:text-slate-200"
                   >
                     {item.label}
                   </Link>
@@ -57,17 +57,17 @@ export const FooterComponent = () => {
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-300">
               Contact
             </h2>
-            <div className="space-y-3 text-sm text-slate-400">
+            <div className="space-y-3 text-sm text-slate-400 dark:text-slate-500">
               <p>📍 Baneshwor, Kathmandu</p>
               <p>
-                <a href="tel:+9779864638141" className="transition-colors hover:text-white">
+                <a href="tel:+9779864638141" className="transition-colors hover:text-white dark:hover:text-slate-200">
                   📞 +977 9864638141
                 </a>
               </p>
               <p>
                 <a
                   href="mailto:peoplescommerce@gmail.com"
-                  className="transition-colors hover:text-white"
+                  className="transition-colors hover:text-white dark:hover:text-slate-200"
                 >
                   📧 peoplescommerce@gmail.com
                 </a>
@@ -85,11 +85,11 @@ export const FooterComponent = () => {
               href="https://www.facebook.com/peoplesreviewweekly/"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
             >
               Facebook
             </a>
-            <p className="mt-3 text-sm text-slate-500">
+            <p className="mt-3 text-sm text-slate-500 dark:text-slate-600">
               Stay connected for updates & offers
             </p>
           </div>
@@ -97,7 +97,7 @@ export const FooterComponent = () => {
 
         <Footer.Divider className="my-8 border-slate-700" />
 
-        <div className="flex flex-col items-center justify-between gap-4 sm:flex-row text-sm text-slate-500">
+        <div className="flex flex-col items-center justify-between gap-4 text-sm text-slate-500 dark:text-slate-600 sm:flex-row">
           <Footer.Copyright
             href="/"
             by="Peoples Commerce™"

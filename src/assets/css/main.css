@@ -5,8 +5,12 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
   body {
-    @apply font-sans text-slate-700 antialiased;
+    @apply font-sans text-slate-700 antialiased bg-white transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100;
   }
 }
 
@@ -15,6 +19,6 @@
     @apply inline-flex items-center justify-center rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:bg-primary-700 hover:shadow-card-hover active:scale-[0.98];
   }
   .section-heading {
-    @apply text-2xl font-bold text-slate-800 md:text-3xl;
+    @apply text-2xl font-bold text-slate-800 md:text-3xl dark:text-slate-50;
   }
 }

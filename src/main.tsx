@@ -6,6 +6,7 @@ import "./assets/css/main.css"
 import RouterConfig from './config/router.config'
 import { Provider } from 'react-redux'
 import store from './config/store.config'
+import { ThemeProvider } from './context/theme.context'
 // import App from './App.tsx'
 // import './index.css'
 
@@ -22,14 +23,18 @@ elem.render(<>
               <React.StrictMode>
               {googleClientId ? (
                 <GoogleOAuthProvider clientId={googleClientId}>
+                  <ThemeProvider>
+                    <Provider store={store}>
+                          <RouterConfig/>
+                    </Provider>
+                  </ThemeProvider>
+                </GoogleOAuthProvider>
+              ) : (
+                <ThemeProvider>
                   <Provider store={store}>
                         <RouterConfig/>
                   </Provider>
-                </GoogleOAuthProvider>
-              ) : (
-                <Provider store={store}>
-                      <RouterConfig/>
-                </Provider>
+                </ThemeProvider>
               )}
             </React.StrictMode>
             </>

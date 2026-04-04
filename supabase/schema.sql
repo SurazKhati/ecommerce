@@ -35,3 +35,15 @@ create table if not exists public.brands (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists public.products (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text not null,
+  price numeric not null default 0,
+  stock integer not null default 0,
+  image text not null,
+  status text not null default 'active' check (status in ('active', 'inactive')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);

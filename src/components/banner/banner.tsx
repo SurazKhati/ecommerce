@@ -2,31 +2,38 @@ import { useEffect, useState } from "react"
 import { SliderComponent } from "../common/slider/slider"
 import { SingleSlider } from "../common/slider/__contracts/contract.slider"
 import bannerSvc from "../../pages/banner/banner.service"
-import banner1 from "../../assets/images/banner1.avif"
-import banner2 from "../../assets/images/banner2.avif"
-import banner3 from "../../assets/images/banner3.avif"
 import banner4 from "../../assets/images/banner4.avif"
+import { HERO_SLIDES } from "../../data/storefront"
 
-const defaultBannerData: Array<SingleSlider> = [
-    {
-        _id: "default-banner-1",
-        title: "Banner 1",
-        image: banner1,
-        link: null
-    },
-    {
-        _id: "default-banner-2",
-        title: "Banner 2",
-        image: banner2,
-        link: null
-    },
-    {
-        _id: "default-banner-3",
-        title: "Banner 3",
-        image: banner3,
-        link: null
+const defaultBannerData: Array<SingleSlider> = HERO_SLIDES
+const FALLBACK_BANNER_COPY = HERO_SLIDES[0]
+
+const normalizeBanner = (banner: any, index: number): SingleSlider => {
+    const rawLink = typeof banner?.link === "string" ? banner.link.trim() : ""
+    const safeLink =
+        !rawLink || rawLink.includes("example.com")
+            ? "/products"
+            : rawLink
+
+    return {
+        _id: banner?._id || `banner-${index}`,
+        title:
+            banner?.title && banner.title !== "Homepage Banner"
+                ? banner.title
+                : "Portable electric burners for fast everyday cooking",
+        image: banner?.image || FALLBACK_BANNER_COPY.image,
+        link: safeLink,
+        eyebrow: banner?.eyebrow || "Featured burner collection",
+        description:
+            banner?.description ||
+            "Discover practical electric burners with compact design, fast heating, and a cleaner setup for home kitchens.",
+        ctaLabel: banner?.ctaLabel || "Shop now",
+        ctaLink: safeLink,
+        stats: Array.isArray(banner?.stats) && banner.stats.length
+            ? banner.stats
+            : ["Portable design", "Quick heating", "Ready for daily use"],
     }
-]
+}
 
 export const BannerComponent = () =>{
     const [bannerData , setBannerData] = useState(defaultBannerData)
@@ -38,7 +45,7 @@ export const BannerComponent = () =>{
             const homeBanners = response?.result?.data
 
             if (Array.isArray(homeBanners) && homeBanners.length > 0) {
-                setBannerData(homeBanners)
+                setBannerData(homeBanners.map(normalizeBanner))
             }
 
         }catch(exception){
